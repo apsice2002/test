@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>口試成績計算 (指定排名及分數差距 - 張固定)</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  label, input, button { margin-bottom: 10px; display: block; }
+  input[type="number"] { width: 100px; }
+  #result { margin-top: 20px; font-weight: bold; }
+  .scenario-group-block { border: 2px solid #007bff; padding: 15px; margin-bottom: 25px; background-color: #e9f5ff; border-radius: 8px;}
+  .scenario-group-block h2 { color: #007bff; margin-top: 0; }
+  .ranking-scenario-block { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background-color: #f9f9f9; border-radius: 4px; }
+  .ranking-scenario-block h3 { margin-top: 0; font-size: 1.1em; color: #333; }
+  .not-found { color: red; }
+  #summaryResult { margin-top: 40px; border: 3px solid #28a745; padding: 20px; background-color: #d4edda; border-radius: 10px;}
+  #summaryResult h2 { color: #28a745; }
+  #summaryResult ul { list-style-type: none; padding-left: 20px; }
+  #summaryResult li { margin-bottom: 5px; }
+  #summaryResult table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  #summaryResult th, #summaryResult td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  #summaryResult th { background-color: #c3e6cb; }
+</style>
+</head>
+<body>
+
+<h1>口試成績計算 (指定排名及分數差距 - 張固定)</h1>
+<p>此工具將針對 王、張、柯 三位學生，找到滿足總分差距 (5-6分) 的口試成績組合，並列出所有六種排名情況的範例。</p>
+<p>張同學的口試分數將固定測試 65, 74, 82, 91 分四種情況。王同學和柯同學的口試分數範圍為 60 到 99 分。</p>
+
+<label for="scoreWang_written">王同學筆試成績 (30-100):</label>
+<input type="number" id="scoreWang_written" min="30" max="100" value="70">
+
+<label for="scoreChang_written">張同學筆試成績 (30-100):</label>
+<input type="number" id="scoreChang_written" min="30" max="100" value="75">
+
+<label for="scoreKo_written">柯同學筆試成績 (30-100):</label>
+<input type="number" id="scoreKo_written" min="30" max="100" value="80">
+
+<button onclick="findRankingExamples()">尋找排名範例</button>
+
+<div id="result"></div>
+<div id="summaryResult"></div>
+
+<script>
+// 輔助函數：計算總分
+function calculateTotalScore(writtenScore, oralScore) {
+  const written_weight = 0.4;
+  const oral_weight = 0.6;
+  return (writtenScore * written_weight) + (oralScore * oral_weight);
+}
+
+// 輔助函數：檢查分數差距 (針對總分)
+function checkScoreDifference(score1, score2) {
+  const diff = Math.abs(score1 - score2);
+  const epsilon = 0.001; 
+  return diff >= (5 - epsilon) && diff <= (6 + epsilon);
+}
+
+function findRankingExamples() {
+  const scoreWang_written = parseInt(document.getElementById('scoreWang_written').value);
+  const scoreChang_written = parseInt(document.getElementById('scoreChang_written').value);
+  const scoreKo_written = parseInt(document.getElementById('scoreKo_written').value);
+
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = ''; // 清空之前的結果
+  const summaryDiv = document.getElementById('summaryResult');
+  summaryDiv.innerHTML = ''; // 清空之前的總結
+
+  // 筆試成績輸入驗證 (30-100)
+  if (isNaN(scoreWang_written) || isNaN(scoreChang_written) || isNaN(scoreKo_written) ||
+      scoreWang_written < 30 || scoreWang_written > 100 ||
+      scoreChang_written < 30 || scoreChang_written > 100 ||
+      scoreKo_written < 30 || scoreKo_written > 100) {
+    resultDiv.innerHTML = '請輸入有效的筆試成績 (30-100)。';
+    return;
+  }
+
+  const minOralScore = 60;
+  const maxOralScore = 99;
+  
+  const fixedChangOralScores = [65, 74, 82, 91]; // 張同學的固定口試分數
+
+  const rankingOrder = [
+    '王>張>柯', '王>柯>張', '張>王>柯', '張>柯>王', '柯>王>張', '柯>張>王'
+  ];
+
+  let outputHtml = '';
+  
+  // 用於收集所有排名情境下的口試分數差距，以便計算平均值
+  let allRankingsOralDiffs = {}; 
+  rankingOrder.forEach(r => {
+      allRankingsOralDiffs[r] = {
+          firstToSecond: [],
+          secondToThird: []
+      };
+  });
+
+  // 外層迴圈：遍歷 張同學 的固定口試分數
+  fixedChangOralScores.forEach((oralChang_fixed) => {
+    let currentFoundRankings = {
+      '王>張>柯': null, '王>柯>張': null, '張>王>柯': null,
+      '張>柯>王': null, '柯>王>張': null, '柯>張>王': null,
+    };
+    
+    const totalChang_fixed = calculateTotalScore(scoreChang_written, oralChang_fixed);
+
+    // 內層迴圈：遍歷 王同學 和 柯同學 的口試分數
+    for (let oralWang = minOralScore; oralWang <= maxOralScore; oralWang++) {
+      for (let oralKo = minOralScore; oralKo <= maxOralScore; oralKo++) {
+        
+        // 如果這個 張同學 的口試情境下，所有排名都已經找到範例，則停止遍歷 王同學 和 柯同學
+        if (Object.values(currentFoundRankings).every(val => val !== null)) {
+            break;
+        }
+
+        const totalWang = calculateTotalScore(scoreWang_written, oralWang);
+        const totalKo = calculateTotalScore(scoreKo_written, oralKo);
+
+        // 檢查六種排名情況，並確保總分差距符合條件
+        
+        // 王>張>柯
+        if (!currentFoundRankings['王>張>柯'] && totalWang > totalChang_fixed && totalChang_fixed > totalKo && 
+            checkScoreDifference(totalWang, totalChang_fixed) && 
+            checkScoreDifference(totalChang_fixed, totalKo)) {
+          currentFoundRankings['王>張>柯'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+        // 王>柯>張
+        if (!currentFoundRankings['王>柯>張'] && totalWang > totalKo && totalKo > totalChang_fixed &&
+            checkScoreDifference(totalWang, totalKo) && 
+            checkScoreDifference(totalKo, totalChang_fixed)) {
+          currentFoundRankings['王>柯>張'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+        // 張>王>柯
+        if (!currentFoundRankings['張>王>柯'] && totalChang_fixed > totalWang && totalWang > totalKo &&
+            checkScoreDifference(totalChang_fixed, totalWang) && 
+            checkScoreDifference(totalWang, totalKo)) {
+          currentFoundRankings['張>王>柯'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+        // 張>柯>王
+        if (!currentFoundRankings['張>柯>王'] && totalChang_fixed > totalKo && totalKo > totalWang &&
+            checkScoreDifference(totalChang_fixed, totalKo) && 
+            checkScoreDifference(totalKo, totalWang)) {
+          currentFoundRankings['張>柯>王'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+        // 柯>王>張
+        if (!currentFoundRankings['柯>王>張'] && totalKo > totalWang && totalWang > totalChang_fixed &&
+            checkScoreDifference(totalKo, totalWang) && 
+            checkScoreDifference(totalWang, totalChang_fixed)) {
+          currentFoundRankings['柯>王>張'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+        // 柯>張>王
+        if (!currentFoundRankings['柯>張>王'] && totalKo > totalChang_fixed && totalChang_fixed > totalWang &&
+            checkScoreDifference(totalKo, totalChang_fixed) && 
+            checkScoreDifference(totalChang_fixed, totalWang)) {
+          currentFoundRankings['柯>張>王'] = { oralWang, oralChang: oralChang_fixed, oralKo, totalWang, totalChang: totalChang_fixed, totalKo };
+        }
+      }
+      if (Object.values(currentFoundRankings).every(val => val !== null)) {
+            break; // 如果所有排名都已經找到範例，則停止遍歷 柯同學
+        }
+    }
+
+    // 顯示這個 張同學 的口試情境下的所有排名範例
+    outputHtml += `<div class="scenario-group-block">`;
+    outputHtml += `<h2>當張同學筆試 ${scoreChang_written} 分，口試為 ${oralChang_fixed} 分時 (總分 張: ${totalChang_fixed.toFixed(1)})：</h2>`;
+
+    rankingOrder.forEach(ranking => {
+      const example = currentFoundRankings[ranking];
+      if (example) {
+        // 取得口試分數
+        const oralScores = {
+          '王': example.oralWang,
+          '張': example.oralChang,
+          '柯': example.oralKo
+        };
+
+        // 根據排名順序計算口試分數差距
+        const rankingParts = ranking.split('>');
+        let oralDiffsHtml = [];
+        let diff1 = 0;
+        let diff2 = 0;
+
+        // First to Second
+        const p1 = rankingParts[0];
+        const p2 = rankingParts[1];
+        const oral1 = oralScores[p1];
+        const oral2 = oralScores[p2];
+        diff1 = oral1 - oral2;
+        oralDiffsHtml.push(`<li>${p1} 口試 (${oral1}) - ${p2} 口試 (${oral2}) = <strong>${diff1.toFixed(0)} 分</strong></li>`);
+        allRankingsOralDiffs[ranking].firstToSecond.push(diff1);
+
+        // Second to Third
+        const p3 = rankingParts[2];
+        const oral3 = oralScores[p3];
+        diff2 = oral2 - oral3;
+        oralDiffsHtml.push(`<li>${p2} 口試 (${oral2}) - ${p3} 口試 (${oral3}) = <strong>${diff2.toFixed(0)} 分</strong></li>`);
+        allRankingsOralDiffs[ranking].secondToThird.push(diff2);
+        
+        outputHtml += `
+          <div class="ranking-scenario-block">
+            <h3>排名情境: ${ranking}</h3>
+            <ul>
+              <li>王同學筆試: ${scoreWang_written}, 口試: ${example.oralWang}, 總分: ${example.totalWang.toFixed(1)}</li>
+              <li>張同學筆試: ${scoreChang_written}, 口試: ${example.oralChang}, 總分: ${example.totalChang.toFixed(1)}</li>
+              <li>柯同學筆試: ${scoreKo_written}, 口試: ${example.oralKo}, 總分: ${example.totalKo.toFixed(1)}</li>
+            </ul>
+            <p><strong>口試分數差距：</strong></p>
+            <ul>
+              ${oralDiffsHtml.join('')}
+            </ul>
+          </div>
+        `;
+      } else {
+        outputHtml += `
+          <div class="ranking-scenario-block not-found">
+            <h3>排名情境: ${ranking}</h3>
+            <p><strong>無法找到滿足此排名且總分差距在 5-6 分之間的口試成績組合。</strong></p>
+            <p>這可能是由於筆試成績差異、張同學的口試分數或口試分數範圍（60-99）限制了可能性。</p>
+          </div>
+        `;
+      }
+    });
+    outputHtml += `</div>`; // 結束 scenario-group-block
+  }); // 結束 fixedChangOralScores.forEach
+  resultDiv.innerHTML = outputHtml;
+
+
+  // 生成最終的總結與平均值表格
+  let summaryTableHtml = `
+    <h2>口試分數差距總結與平均值</h2>
+    <p>根據您設定的筆試成績 (王: ${scoreWang_written}, 張: ${scoreChang_written}, 柯: ${scoreKo_written})，以下是針對不同排名情境下，所有成功找到的口試分數差距平均值：</p>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>排名情境</th>
+                <th>第一名 - 第二名 口試差距</th>
+                <th>第二名 - 第三名 口試差距</th>
+            </tr>
+        </thead>
+        <tbody>
+  `;
+
+  rankingOrder.forEach(ranking => {
+      const firstToSecondArr = allRankingsOralDiffs[ranking].firstToSecond;
+      const secondToThirdArr = allRankingsOralDiffs[ranking].secondToThird;
+
+      const avg1 = firstToSecondArr.length > 0 ? (firstToSecondArr.reduce((sum, val) => sum + val, 0) / firstToSecondArr.length).toFixed(1) : '無數據';
+      const avg2 = secondToThirdArr.length > 0 ? (secondToThirdArr.reduce((sum, val) => sum + val, 0) / secondToThirdArr.length).toFixed(1) : '無數據';
+
+      summaryTableHtml += `
+          <tr>
+              <td>${ranking}</td>
+              <td>${firstToSecondArr.length > 0 ? `平均: <strong>${avg1} 分</strong> (${firstToSecondArr.join(', ')})` : '無數據'}</td>
+              <td>${secondToThirdArr.length > 0 ? `平均: <strong>${avg2} 分</strong> (${secondToThirdArr.join(', ')})` : '無數據'}</td>
+          </tr>
+      `;
+  });
+
+  summaryTableHtml += `
+        </tbody>
+    </table>
+    <p style="margin-top: 15px; font-size: 0.9em;">(請注意：平均值為小數點後一位。若顯示 '無數據'，表示在所有 張同學口試分數設定下都未能找到符合總分差距 5-6 分的此種排名組合。括號內為所有找到的單次差距值。)</p>
+  `;
+
+  summaryDiv.innerHTML = summaryTableHtml;
+}
+</script>
+
+</body>
+</html>
