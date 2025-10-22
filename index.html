@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>口試成績計算 (固定 B 口試)</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  label, input, button { margin-bottom: 10px; display: block; }
+  input[type="number"] { width: 100px; }
+  #result { margin-top: 20px; font-weight: bold; }
+  .scenario-block { border: 1px solid #ccc; padding: 10px; margin-bottom: 15px; background-color: #f9f9f9; }
+</style>
+</head>
+<body>
+
+<h1>口試成績計算 (固定 B 口試)</h1>
+<p>此工具將針對學生 B 口試分數為 77, 80, 85 的三種情況，分別計算學生 A 和 C 的口試分數範圍，以滿足 A > B > C 的排名。</p>
+
+<label for="scoreA">學生 A 筆試成績 (30-100):</label>
+<input type="number" id="scoreA" min="30" max="100" value="60">
+
+<label for="scoreB">學生 B 筆試成績 (30-100):</label>
+<input type="number" id="scoreB" min="30" max="100" value="90">
+
+<label for="scoreC">學生 C 筆試成績 (30-100):</label>
+<input type="number" id="scoreC" min="30" max="100" value="70">
+
+<button onclick="calculateOralRanges()">計算口試成績範圍</button>
+
+<div id="result"></div>
+
+<script>
+function calculateOralRanges() {
+  const scoreA_written = parseInt(document.getElementById('scoreA').value);
+  const scoreB_written = parseInt(document.getElementById('scoreB').value);
+  const scoreC_written = parseInt(document.getElementById('scoreC').value);
+
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = ''; // 清空之前的結果
+
+  // 筆試成績輸入驗證 (30-100)
+  if (isNaN(scoreA_written) || isNaN(scoreB_written) || isNaN(scoreC_written) ||
+      scoreA_written < 30 || scoreA_written > 100 ||
+      scoreB_written < 30 || scoreB_written > 100 ||
+      scoreC_written < 30 || scoreC_written > 100) {
+    resultDiv.innerHTML = '請輸入有效的筆試成績 (30-100)。';
+    return;
+  }
+
+  const written_weight = 0.4;
+  const oral_weight = 0.6;
+  const minOralScoreOverall = 60; // A和C口試分數的整體最低限制
+  const maxOralScoreOverall = 99; // A和C口試分數的整體最高限制
+
+  // 固定 B 的口試分數情境
+  const bOralScenarios = [77, 80, 85]; 
+  let outputHtml = '';
+
+  bOralScenarios.forEach((oralB_fixed, index) => {
+    // 計算 B 的總分
+    const totalB = (scoreB_written * written_weight) + (oralB_fixed * oral_weight);
+
+    // --- 計算 A 的口試分數範圍 (A > B) ---
+    // 口試A > (totalB - (scoreA_written * 0.4)) / 0.6
+    let lowerBoundA_calc = (totalB - (scoreA_written * written_weight)) / oral_weight;
+    let oralA_min = Math.ceil(lowerBoundA_calc); 
+    if (oralA_min <= lowerBoundA_calc) { // 如果是整數且剛好等於，也要+1
+        oralA_min += 1;
+    }
+    
+    // 確保在整體口試分數限制內
+    oralA_min = Math.max(minOralScoreOverall, oralA_min);
+    const oralA_max = maxOralScoreOverall;
+
+    // --- 計算 C 的口試分數範圍 (B > C) ---
+    // (totalB - (scoreC_written * 0.4)) / 0.6 > 口試C
+    let upperBoundC_calc = (totalB - (scoreC_written * written_weight)) / oral_weight;
+    let oralC_max = Math.floor(upperBoundC_calc); 
+    if (oralC_max >= upperBoundC_calc) { // 如果是整數且剛好等於，也要-1
+        oralC_max -= 1;
+    }
+
+    // 確保在整體口試分數限制內
+    oralC_max = Math.min(maxOralScoreOverall, oralC_max);
+    const oralC_min = minOralScoreOverall;
+    
+    // 檢查是否有有效的口試分數範圍
+    if (oralA_min <= oralA_max && oralC_min <= oralC_max) {
+      outputHtml += `
+        <div class="scenario-block">
+          <h3>情境 ${index + 1}:</h3>
+          <p>當學生 B 筆試 ${scoreB_written} 分，口試為 **${oralB_fixed}** 分時 (總分 B: ${totalB.toFixed(1)})：</p>
+          <ul>
+            <li>學生 A 筆試 ${scoreA_written} 分，口試分數範圍應為：<strong>[${oralA_min} ~ ${oralA_max}]</strong> (滿足 A > B)</li>
+            <li>學生 C 筆試 ${scoreC_written} 分，口試分數範圍應為：<strong>[${oralC_min} ~ ${oralC_max}]</strong> (滿足 B > C)</li>
+          </ul>
+        </div>
+      `;
+    } else {
+        outputHtml += `
+            <div class="scenario-block">
+                <h3>情境 ${index + 1}:</h3>
+                <p>當學生 B 筆試 ${scoreB_written} 分，口試為 **${oralB_fixed}** 分時 (總分 B: ${totalB.toFixed(1)})：</p>
+                <p><strong>無法找到有效的 A 或 C 口試分數範圍來滿足 A > B > C 的排名。筆試成績可能差距過大，或者分數範圍過於限制。</strong></p>
+            </div>
+        `;
+    }
+  });
+  resultDiv.innerHTML = outputHtml;
+}
+</script>
+
+</body>
+</html>
